@@ -55,13 +55,12 @@ Adding socks capability for "testing" Tor .onion hidden services sites.
 * **How to use it?**
 
   ```
-go get -u -a github.com/valyala/goloris
-go build github.com/valyala/goloris
+go get -u -a github.com/hanzer/goloris
+go build github.com/hanzer/goloris
 ./goloris -help
   ```
 
 P.S. Don't forget adjusting `ulimit -n` before experimenting.
 
-And remember - goloris is published for educational purposes only.
 
 [1] http://ha.ckers.org/slowloris/
