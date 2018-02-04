@@ -1,6 +1,8 @@
 Goloris - slowloris[1] for nginx DoS
 ===============================================
 
+Adding socks capability for "testing" Tor .onion hidden services sites.
+
 ## FAQ
 
 * **Features**
